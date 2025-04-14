@@ -13,3 +13,5 @@ The entire logic, styling, and visualization are embedded within a single HTML f
   
   To demonstrate how data structures, control flow, and visual logic can work together to solve      complex problems.
 
+DEPLOYED HERE:
+https://sgupta-boop.github.io/8_queen_simulation-/
