@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>8 Queens Problem Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+        }
+        #board {
+            margin: 20px auto;
+        }
+        .cell {
+            stroke: #333;
+            stroke-width: 1px;
+        }
+        .queen {
+            font-size: 24px;
+            text-anchor: middle;
+            dominant-baseline: central;
+            transition: fill 0.3s;
+        }
+        .removing {
+            fill: red !important;
+        }
+        .controls {
+            margin: 20px;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+        #status {
+            margin: 10px;
+            font-weight: bold;
+        }
+        .saved-solutions {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .solution {
+            margin: 15px;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .solution-info {
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .solution-board {
+            margin-top: 10px;
+        }
+        .speed-control {
+            margin: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>8 Queens Problem Visualization</h1>
+    <div class="controls">
+        <button id="start">Start</button>
+        <button id="pause">Pause</button>
+        <button id="reset">Reset</button>
+        <div class="speed-control">
+            <label for="speed">Animation Speed:</label>
+            <input type="range" id="speed" min="50" max="1000" value="200">
+            <span id="speed-value">200ms</span>
+        </div>
+        <div id="status">Ready to start</div>
+    </div>
+    <div id="board"></div>
+    <div id="current-solution"></div>
+    <div id="saved-solutions" class="saved-solutions" style="display: none;">
+        <h3>Found Solutions</h3>
+        <div id="solutions-list"></div>
+    </div>
+
+    <script>
+        const boardSize = 8;
+        const cellSize = 50;
+        const boardWidth = boardSize * cellSize;
+        let currentSolution = [];
+        let foundSolutions = [];
+        let animationSpeed = 200;
+        let isRunning = false;
+        let animationTimer = null;
+
+        // Initialize the board
+        const svg = d3.select("#board")
+            .append("svg")
+            .attr("width", boardWidth)
+            .attr("height", boardWidth);
+
+        // Speed control
+        document.getElementById("speed").addEventListener("input", function() {
+            animationSpeed = parseInt(this.value);
+            document.getElementById("speed-value").textContent = animationSpeed + "ms";
+        });
+
+        // Create chessboard
+        function createBoard() {
+            svg.selectAll("*").remove();
+            
+            for (let row = 0; row < boardSize; row++) {
+                for (let col = 0; col < boardSize; col++) {
+                    svg.append("rect")
+                        .attr("class", "cell")
+                        .attr("x", col * cellSize)
+                        .attr("y", row * cellSize)
+                        .attr("width", cellSize)
+                        .attr("height", cellSize)
+                        .attr("fill", (row + col) % 2 === 0 ? "#f0d9b5" : "#b58863")
+                        .attr("id", `cell-${row}-${col}`);
+                }
+            }
+        }
+
+        // Create a solution board (smaller version)
+        function createSolutionBoard(solution, container) {
+            const smallCellSize = 30;
+            const smallBoardWidth = boardSize * smallCellSize;
+            
+            const solutionSvg = container.append("svg")
+                .attr("width", smallBoardWidth)
+                .attr("height", smallBoardWidth)
+                .attr("class", "solution-board");
+            
+            for (let row = 0; row < boardSize; row++) {
+                for (let col = 0; col < boardSize; col++) {
+                    solutionSvg.append("rect")
+                        .attr("class", "cell")
+                        .attr("x", col * smallCellSize)
+                        .attr("y", row * smallCellSize)
+                        .attr("width", smallCellSize)
+                        .attr("height", smallCellSize)
+                        .attr("fill", (row + col) % 2 === 0 ? "#f0d9b5" : "#b58863");
+                }
+            }
+            
+            // Draw queens
+            solution.forEach((queenCol, queenRow) => {
+                solutionSvg.append("text")
+                    .attr("class", "queen")
+                    .attr("x", queenCol * smallCellSize + smallCellSize / 2)
+                    .attr("y", queenRow * smallCellSize + smallCellSize / 2)
+                    .text("♕")
+                    .style("font-size", "20px");
+            });
+        }
+
+        // Update the board visualization
+        function updateBoard() {
+            // Clear all queens
+            svg.selectAll(".queen").remove();
+            
+            // Draw current queens
+            currentSolution.forEach((queenCol, queenRow) => {
+                svg.append("text")
+                    .attr("class", "queen")
+                    .attr("x", queenCol * cellSize + cellSize / 2)
+                    .attr("y", queenRow * cellSize + cellSize / 2)
+                    .text("♕");
+            });
+
+            // Update current solution display
+            d3.select("#current-solution").text(
+                `Current placement: [${currentSolution.join(", ")}]`
+            );
+        }
+
+        // Show backtracking visualization
+        async function showBacktrack(row, col) {
+            if (!isRunning) return;
+            
+            // Highlight the queen being removed in red
+            const queen = svg.append("text")
+                .attr("class", "queen removing")
+                .attr("x", col * cellSize + cellSize / 2)
+                .attr("y", row * cellSize + cellSize / 2)
+                .text("♕");
+            
+            document.getElementById("status").textContent = 
+                `Backtracking: removing queen from row ${row}, column ${col}`;
+            
+            // Wait longer during backtracking
+            await new Promise(resolve => {
+                clearTimeout(animationTimer);
+                animationTimer = setTimeout(resolve, animationSpeed * 2);
+            });
+            
+            // Remove the queen
+            queen.remove();
+            updateBoard();
+            
+            // Additional pause after removal
+            await new Promise(resolve => {
+                clearTimeout(animationTimer);
+                animationTimer = setTimeout(resolve, animationSpeed);
+            });
+        }
+
+        // Save the found solution
+        function saveSolution(solution) {
+            foundSolutions.push([...solution]);
+            document.getElementById("saved-solutions").style.display = "block";
+            
+            // Update solutions list
+            const solutionsList = document.getElementById("solutions-list");
+            const solutionDiv = document.createElement("div");
+            solutionDiv.className = "solution";
+            
+            // Add solution info
+            const infoDiv = document.createElement("div");
+            infoDiv.className = "solution-info";
+            infoDiv.textContent = `Solution ${foundSolutions.length}: [${solution.join(", ")}]`;
+            solutionDiv.appendChild(infoDiv);
+            
+            // Add container for the board
+            const boardContainer = document.createElement("div");
+            solutionDiv.appendChild(boardContainer);
+            
+            solutionsList.appendChild(solutionDiv);
+            
+            // Create the solution board visualization
+            createSolutionBoard(solution, d3.select(boardContainer));
+        }
+
+        // Check if we should skip this path based on found solutions
+        function shouldSkipPath() {
+            for (const solution of foundSolutions) {
+                let matches = true;
+                for (let i = 0; i < currentSolution.length; i++) {
+                    if (currentSolution[i] !== solution[i]) {
+                        matches = false;
+                        break;
+                    }
+                }
+                if (matches) return true;
+            }
+            return false;
+        }
+
+        // Check if placing a queen at (row, col) is safe
+        function isSafe(row, col) {
+            for (let i = 0; i < currentSolution.length; i++) {
+                const queenCol = currentSolution[i];
+                const queenRow = i;
+                
+                // Same column or diagonal
+                if (col === queenCol || Math.abs(col - queenCol) === Math.abs(row - queenRow)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Recursive function to solve 8 queens
+        async function solveQueens(row) {
+            if (!isRunning) return;
+            
+            // Skip paths that lead to known solutions
+            if (shouldSkipPath()) {
+                return;
+            }
+
+            if (row === boardSize) {
+                // Found a new solution
+                saveSolution(currentSolution);
+                document.getElementById("status").textContent = `Found solution #${foundSolutions.length}!`;
+                updateBoard();
+                
+                // Continue searching after a brief pause
+                await new Promise(resolve => {
+                    clearTimeout(animationTimer);
+                    animationTimer = setTimeout(resolve, animationSpeed * 2);
+                });
+                return;
+            }
+
+            for (let col = 0; col < boardSize; col++) {
+                if (!isRunning) return;
+                
+                if (isSafe(row, col)) {
+                    // Place queen
+                    currentSolution.push(col);
+                    updateBoard();
+                    document.getElementById("status").textContent = `Placing queen at row ${row}, column ${col}`;
+                    
+                    await new Promise(resolve => {
+                        clearTimeout(animationTimer);
+                        animationTimer = setTimeout(resolve, animationSpeed);
+                    });
+
+                    // Recurse to next row
+                    await solveQueens(row + 1);
+                    
+                    if (!isRunning) return;
+                    
+                    // Backtrack
+                    const removedCol = currentSolution.pop();
+                    await showBacktrack(row, removedCol);
+                }
+            }
+        }
+
+        // Event handlers
+        document.getElementById("start").addEventListener("click", async function() {
+            if (!isRunning) {
+                isRunning = true;
+                document.getElementById("status").textContent = "Searching for solutions...";
+                await solveQueens(0);
+                isRunning = false;
+                document.getElementById("status").textContent = `Search complete. Found ${foundSolutions.length} solutions.`;
+            }
+        });
+
+        document.getElementById("pause").addEventListener("click", function() {
+            isRunning = false;
+            clearTimeout(animationTimer);
+            document.getElementById("status").textContent = "Paused";
+        });
+
+        document.getElementById("reset").addEventListener("click", function() {
+            isRunning = false;
+            foundSolutions = [];
+            currentSolution = [];
+            clearTimeout(animationTimer);
+            document.getElementById("status").textContent = "Ready to start";
+            document.getElementById("saved-solutions").style.display = "none";
+            document.getElementById("solutions-list").innerHTML = "";
+            createBoard();
+            updateBoard();
+        });
+
+        // Initialize
+        createBoard();
+        updateBoard();
+    </script>
+</body>
+</html>
